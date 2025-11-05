@@ -1,10 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
-// ========================================
-// Estrutura que representa um cômodo da mansão
-// ========================================
+#define TAM_HASH 10
+
+// =======================================================
+// Estrutura que representa um cômodo da mansão (árvore binária)
+// =======================================================
 typedef struct Sala {
     char nome[50];
     char pista[100];
@@ -12,95 +15,175 @@ typedef struct Sala {
     struct Sala *direita;
 } Sala;
 
-// ========================================
-// Estrutura da árvore BST para armazenar pistas
-// ========================================
+// =======================================================
+// Estrutura da BST de pistas
+// =======================================================
 typedef struct PistaNode {
     char pista[100];
     struct PistaNode *esquerda;
     struct PistaNode *direita;
 } PistaNode;
 
-// ========================================
-// Função: criarSala
-// Cria dinamicamente uma nova sala, com ou sem pista
-// ========================================
+// =======================================================
+// Estrutura da tabela hash (associa pista → suspeito)
+// =======================================================
+typedef struct HashItem {
+    char pista[100];
+    char suspeito[50];
+    struct HashItem *prox;
+} HashItem;
+
+HashItem* tabelaHash[TAM_HASH];
+
+// =======================================================
+// Função hash simples (soma dos caracteres da pista)
+// =======================================================
+int hashFunction(const char *chave) {
+    int soma = 0;
+    for (int i = 0; chave[i] != '\0'; i++)
+        soma += tolower(chave[i]);
+    return soma % TAM_HASH;
+}
+
+// =======================================================
+// criarSala() – cria dinamicamente um cômodo
+// =======================================================
 Sala* criarSala(const char *nome, const char *pista) {
     Sala *nova = (Sala*) malloc(sizeof(Sala));
-    if (nova == NULL) {
-        printf("Erro ao alocar memória para a sala.\n");
+    if (!nova) {
+        printf("Erro de memória!\n");
         exit(1);
     }
     strcpy(nova->nome, nome);
-    if (pista != NULL)
-        strcpy(nova->pista, pista);
-    else
-        strcpy(nova->pista, "");  // sem pista
-    nova->esquerda = NULL;
-    nova->direita = NULL;
+    strcpy(nova->pista, pista);
+    nova->esquerda = nova->direita = NULL;
     return nova;
 }
 
-// ========================================
-// Função: criarNodoPista
-// Cria um novo nó para armazenar uma pista
-// ========================================
-PistaNode* criarNodoPista(const char *pista) {
-    PistaNode *novo = (PistaNode*) malloc(sizeof(PistaNode));
-    if (novo == NULL) {
-        printf("Erro ao alocar memória para a pista.\n");
-        exit(1);
-    }
-    strcpy(novo->pista, pista);
-    novo->esquerda = NULL;
-    novo->direita = NULL;
-    return novo;
-}
-
-// ========================================
-// Função: inserirPista
-// Insere uma pista na árvore BST em ordem alfabética
-// ========================================
+// =======================================================
+// inserirPista() – insere uma nova pista na BST (ordenada)
+// =======================================================
 PistaNode* inserirPista(PistaNode *raiz, const char *pista) {
-    if (raiz == NULL)
-        return criarNodoPista(pista);
-
+    if (raiz == NULL) {
+        PistaNode *novo = (PistaNode*) malloc(sizeof(PistaNode));
+        strcpy(novo->pista, pista);
+        novo->esquerda = novo->direita = NULL;
+        return novo;
+    }
     int cmp = strcmp(pista, raiz->pista);
     if (cmp < 0)
         raiz->esquerda = inserirPista(raiz->esquerda, pista);
     else if (cmp > 0)
         raiz->direita = inserirPista(raiz->direita, pista);
-    // se for igual, não insere duplicata
     return raiz;
 }
 
-// ========================================
-// Função: exibirPistas
-// Exibe as pistas em ordem alfabética (in-order traversal)
-// ========================================
+// =======================================================
+// inserirNaHash() – associa pista a um suspeito
+// =======================================================
+void inserirNaHash(const char *pista, const char *suspeito) {
+    int idx = hashFunction(pista);
+    HashItem *novo = (HashItem*) malloc(sizeof(HashItem));
+    strcpy(novo->pista, pista);
+    strcpy(novo->suspeito, suspeito);
+    novo->prox = tabelaHash[idx];
+    tabelaHash[idx] = novo;
+}
+
+// =======================================================
+// encontrarSuspeito() – busca o suspeito correspondente à pista
+// =======================================================
+char* encontrarSuspeito(const char *pista) {
+    int idx = hashFunction(pista);
+    HashItem *atual = tabelaHash[idx];
+    while (atual != NULL) {
+        if (strcmp(atual->pista, pista) == 0)
+            return atual->suspeito;
+        atual = atual->prox;
+    }
+    return "Desconhecido";
+}
+
+// =======================================================
+// exibirPistas() – imprime as pistas em ordem alfabética
+// =======================================================
 void exibirPistas(PistaNode *raiz) {
-    if (raiz == NULL)
-        return;
+    if (raiz == NULL) return;
     exibirPistas(raiz->esquerda);
     printf(" - %s\n", raiz->pista);
     exibirPistas(raiz->direita);
 }
 
-// ========================================
-// Função: liberarPistas
-// Libera recursivamente a memória da BST de pistas
-// ========================================
-void liberarPistas(PistaNode *raiz) {
-    if (raiz == NULL) return;
-    liberarPistas(raiz->esquerda);
-    liberarPistas(raiz->direita);
-    free(raiz);
+// =======================================================
+// contarPistasDoSuspeito() – percorre BST e conta quantas pistas
+// estão associadas ao suspeito acusado
+// =======================================================
+int contarPistasDoSuspeito(PistaNode *raiz, const char *suspeito) {
+    if (raiz == NULL) return 0;
+    int count = 0;
+    if (strcmp(encontrarSuspeito(raiz->pista), suspeito) == 0)
+        count = 1;
+    return count +
+           contarPistasDoSuspeito(raiz->esquerda, suspeito) +
+           contarPistasDoSuspeito(raiz->direita, suspeito);
 }
 
-// ========================================
-// Função: liberarSalas
-// Libera recursivamente a memória da árvore da mansão
-// ========================================
+// =======================================================
+// verificarSuspeitoFinal() – conduz à fase de julgamento
+// =======================================================
+void verificarSuspeitoFinal(PistaNode *raiz) {
+    char acusado[50];
+    printf("\n===== JULGAMENTO FINAL =====\n");
+    printf("Digite o nome do suspeito que deseja acusar: ");
+    scanf(" %[^\n]", acusado);
+
+    int qtd = contarPistasDoSuspeito(raiz, acusado);
+
+    printf("\nPistas que apontam para %s: %d\n", acusado, qtd);
+    if (qtd >= 2) {
+        printf("Acusação bem fundamentada! %s é o verdadeiro culpado!\n", acusado);
+    } else {
+        printf("Pistas insuficientes... talvez você tenha acusado a pessoa errada.\n");
+    }
+}
+
+// =======================================================
+// explorarSalas() – navegação pela mansão e coleta de pistas
+// =======================================================
+void explorarSalas(Sala *atual, PistaNode **raizPistas) {
+    char escolha;
+    while (atual != NULL) {
+        printf("\nVocê está em: %s\n", atual->nome);
+        if (strlen(atual->pista) > 0) {
+            printf("Você encontrou uma pista!\n\"%s\"\n", atual->pista);
+            *raizPistas = inserirPista(*raizPistas, atual->pista);
+        } else {
+            printf("Nenhuma pista aqui.\n");
+        }
+
+        printf("\nEscolha o caminho:\n");
+        if (atual->esquerda) printf("  (e) Ir para %s\n", atual->esquerda->nome);
+        if (atual->direita) printf("  (d) Ir para %s\n", atual->direita->nome);
+        printf("  (s) Sair da mansão\n");
+        printf("Opção: ");
+        scanf(" %c", &escolha);
+
+        if (escolha == 'e' && atual->esquerda)
+            atual = atual->esquerda;
+        else if (escolha == 'd' && atual->direita)
+            atual = atual->direita;
+        else if (escolha == 's') {
+            printf("\nVocê decidiu encerrar a exploração.\n");
+            break;
+        } else {
+            printf("Opção inválida!\n");
+        }
+    }
+}
+
+// =======================================================
+// liberarMemoria() – libera as estruturas alocadas
+// =======================================================
 void liberarSalas(Sala *raiz) {
     if (raiz == NULL) return;
     liberarSalas(raiz->esquerda);
@@ -108,62 +191,39 @@ void liberarSalas(Sala *raiz) {
     free(raiz);
 }
 
-// ========================================
-// Função: explorarSalasComPistas
-// Controla a navegação entre salas e coleta de pistas
-// ========================================
-void explorarSalasComPistas(Sala *atual, PistaNode **raizPistas) {
-    char escolha;
+void liberarPistas(PistaNode *raiz) {
+    if (raiz == NULL) return;
+    liberarPistas(raiz->esquerda);
+    liberarPistas(raiz->direita);
+    free(raiz);
+}
 
-    while (atual != NULL) {
-        printf("\nVocê está em: %s\n", atual->nome);
-
-        // Se a sala tem uma pista
-        if (strlen(atual->pista) > 0) {
-            printf("Você encontrou uma pista!\n");
-            printf("\"%s\"\n", atual->pista);
-            *raizPistas = inserirPista(*raizPistas, atual->pista);
-        } else {
-            printf("Não há pistas nesta sala.\n");
+void liberarHash() {
+    for (int i = 0; i < TAM_HASH; i++) {
+        HashItem *atual = tabelaHash[i];
+        while (atual) {
+            HashItem *temp = atual;
+            atual = atual->prox;
+            free(temp);
         }
-
-        printf("\nEscolha o caminho:\n");
-        if (atual->esquerda != NULL)
-            printf("  (e) Ir para %s\n", atual->esquerda->nome);
-        if (atual->direita != NULL)
-            printf("  (d) Ir para %s\n", atual->direita->nome);
-        printf("  (s) Sair da exploração\n");
-        printf("Opção: ");
-        scanf(" %c", &escolha);
-
-        if (escolha == 'e' && atual->esquerda != NULL) {
-            atual = atual->esquerda;
-        } else if (escolha == 'd' && atual->direita != NULL) {
-            atual = atual->direita;
-        } else if (escolha == 's') {
-            printf("\nEncerrando a exploração...\n");
-            break;
-        } else {
-            printf("Opção inválida! Tente novamente.\n");
-        }
+        tabelaHash[i] = NULL;
     }
 }
 
-// ========================================
-// Função principal: main
-// Monta o mapa fixo da mansão e inicia o jogo
-// ========================================
+// =======================================================
+// Função principal – monta o jogo completo
+// =======================================================
 int main() {
-    // Construção manual do mapa da mansão
-    Sala *hall = criarSala("Hall de Entrada", "Um bilhete rasgado: 'a verdade está no porão...'");
-    Sala *salaEstar = criarSala("Sala de Estar", "Uma pegada de lama perto da lareira.");
-    Sala *cozinha = criarSala("Cozinha", "Uma colher com resquícios de algo brilhante.");
-    Sala *biblioteca = criarSala("Biblioteca", "Um livro aberto na página 42.");
+    // Mapa fixo da mansão (árvore binária)
+    Sala *hall = criarSala("Hall de Entrada", "Um bilhete rasgado com a inicial 'C'.");
+    Sala *salaEstar = criarSala("Sala de Estar", "Uma luva suja de tinta.");
+    Sala *cozinha = criarSala("Cozinha", "Um colar caro deixado sobre a mesa.");
+    Sala *biblioteca = criarSala("Biblioteca", "Uma anotação sobre veneno.");
     Sala *jardim = criarSala("Jardim", "");
-    Sala *quarto = criarSala("Quarto Principal", "Um perfume adocicado no ar.");
-    Sala *porao = criarSala("Porão Misterioso", "Uma luva suja de tinta vermelha.");
+    Sala *quarto = criarSala("Quarto Principal", "Um perfume raro de uso masculino.");
+    Sala *porao = criarSala("Porão Misterioso", "Uma chave com o brasão da família.");
 
-    // Ligação entre salas (estrutura da árvore binária)
+    // Conexões da árvore
     hall->esquerda = salaEstar;
     hall->direita = cozinha;
     salaEstar->esquerda = biblioteca;
@@ -171,27 +231,34 @@ int main() {
     cozinha->direita = quarto;
     quarto->esquerda = porao;
 
-    // Árvore de pistas começa vazia
+    // Criação da tabela hash (pistas → suspeitos)
+    inserirNaHash("Um bilhete rasgado com a inicial 'C'.", "Carla");
+    inserirNaHash("Uma luva suja de tinta.", "Roberto");
+    inserirNaHash("Um colar caro deixado sobre a mesa.", "Carla");
+    inserirNaHash("Uma anotação sobre veneno.", "Dra. Elisa");
+    inserirNaHash("Um perfume raro de uso masculino.", "Roberto");
+    inserirNaHash("Uma chave com o brasão da família.", "Sr. Augusto");
+
     PistaNode *pistas = NULL;
 
-    printf("===============================================\n");
-    printf("   Detective Quest: A Mansão das Pistas\n");
-    printf("===============================================\n");
-    printf("Você inicia sua investigação no Hall de Entrada...\n");
+    printf("=========================================\n");
+    printf("   Detective Quest: Julgamento Final\n");
+    printf("=========================================\n");
+    printf("Você inicia sua investigação no Hall de Entrada.\n");
 
-    // Inicia a exploração com coleta de pistas
-    explorarSalasComPistas(hall, &pistas);
+    explorarSalas(hall, &pistas);
 
-    // Exibe todas as pistas coletadas
     printf("\n===== PISTAS COLETADAS =====\n");
     if (pistas == NULL)
-        printf("Nenhuma pista foi encontrada!\n");
+        printf("Nenhuma pista coletada!\n");
     else
         exibirPistas(pistas);
 
-    // Libera memória
+    verificarSuspeitoFinal(pistas);
+
     liberarSalas(hall);
     liberarPistas(pistas);
+    liberarHash();
 
     printf("\nObrigado por jogar Detective Quest!\n");
     return 0;
